@@ -1,0 +1,134 @@
+{
+  "name": "AI Meeting Notes to Tasks & Summary",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "meeting-transcript",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "00be73bf-4a9e-4bb3-8ea8-f1022fa2839a",
+      "name": "Transcript Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\n  \"model\": \"gpt-4o-mini\",\n  \"response_format\": { \"type\": \"json_object\" },\n  \"messages\": [\n    { \"role\": \"system\", \"content\": \"You summarise meetings. Reply with JSON only: {title: string, summary: string, decisions: string[], tasks: [{task: string, owner: string, due: string}]}. Use only facts stated in the transcript; if an owner or date is not stated, use 'Unassigned' / 'No date'.\" },\n    { \"role\": \"user\", \"content\": \"Meeting title: {{ $json.body.title }}\\n\\nTranscript:\\n{{ $json.body.transcript }}\" }\n  ]\n}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "cd2ce074-af73-4752-ad9e-b9b7be846495",
+      "name": "AI Summarise & Extract Tasks (OpenAI)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json.choices[0].message.content;\nconst ai = JSON.parse(raw);\nreturn ai.tasks.map(t => ({ json: { meeting: ai.title, summary: ai.summary, decisions: ai.decisions.join('; '), task: t.task, owner: t.owner, due: t.due, created_at: new Date().toISOString() } }));"
+      },
+      "id": "0e01b559-5460-4187-bcc9-9ed0a02f366e",
+      "name": "Build Task Rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "options": {}
+      },
+      "id": "f3403ed3-9dd6-4243-8b09-1cd8dafff27b",
+      "name": "Save Tasks to Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "options": {}
+      },
+      "id": "7e60a1a4-cad9-40cb-a5b1-627f00b1cb3c",
+      "name": "Email Meeting Summary (Gmail)",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1120,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Transcript Webhook": {
+      "main": [
+        [
+          {
+            "node": "AI Summarise & Extract Tasks (OpenAI)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Summarise & Extract Tasks (OpenAI)": {
+      "main": [
+        [
+          {
+            "node": "Build Task Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Task Rows": {
+      "main": [
+        [
+          {
+            "node": "Save Tasks to Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Tasks to Sheet": {
+      "main": [
+        [
+          {
+            "node": "Email Meeting Summary (Gmail)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null
+}
